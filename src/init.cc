@@ -20,7 +20,7 @@ init(Handle<Object> target) {
     Contour::Init(target);
 	  TrackedObject::Init(target);
     NamedWindow::Init(target);
-
+    
    #if CV_MAJOR_VERSION >= 2 && CV_MINOR_VERSION >=4
      FaceRecognizerWrap::Init(target);
    #endif

@@ -56,7 +56,7 @@ Matrix::Init(Handle<Object> target) {
 	NODE_SET_PROTOTYPE_METHOD(constructor, "channels", Channels);
 
 	NODE_SET_PROTOTYPE_METHOD(constructor, "convertGrayscale", ConvertGrayscale);
-    NODE_SET_PROTOTYPE_METHOD(constructor, "convertHSVscale", ConvertHSVscale);
+  NODE_SET_PROTOTYPE_METHOD(constructor, "convertHSVscale", ConvertHSVscale);
 	NODE_SET_PROTOTYPE_METHOD(constructor, "gaussianBlur", GaussianBlur);
 	NODE_SET_PROTOTYPE_METHOD(constructor, "copy", Copy);
 	NODE_SET_PROTOTYPE_METHOD(constructor, "flip", Flip);
@@ -68,7 +68,7 @@ Matrix::Init(Handle<Object> target) {
 	NODE_SET_PROTOTYPE_METHOD(constructor, "countNonZero", CountNonZero);
 	//NODE_SET_PROTOTYPE_METHOD(constructor, "split", Split);
 	NODE_SET_PROTOTYPE_METHOD(constructor, "canny", Canny);
-    NODE_SET_PROTOTYPE_METHOD(constructor, "dilate", Dilate);
+  NODE_SET_PROTOTYPE_METHOD(constructor, "dilate", Dilate);
 	NODE_SET_PROTOTYPE_METHOD(constructor, "erode", Erode);
 
 	NODE_SET_PROTOTYPE_METHOD(constructor, "findContours", FindContours);
@@ -85,11 +85,13 @@ Matrix::Init(Handle<Object> target) {
 	NODE_SET_PROTOTYPE_METHOD(constructor, "threshold", Threshold);
 	NODE_SET_PROTOTYPE_METHOD(constructor, "meanStdDev", MeanStdDev);
     
-    NODE_SET_PROTOTYPE_METHOD(constructor, "cvtColor", CvtColor);
-    NODE_SET_PROTOTYPE_METHOD(constructor, "split", Split);
-    NODE_SET_PROTOTYPE_METHOD(constructor, "merge", Merge);
-    NODE_SET_PROTOTYPE_METHOD(constructor, "equalizeHist", EqualizeHist);
+  NODE_SET_PROTOTYPE_METHOD(constructor, "cvtColor", CvtColor);
+  NODE_SET_PROTOTYPE_METHOD(constructor, "split", Split);
+  NODE_SET_PROTOTYPE_METHOD(constructor, "merge", Merge);
+  NODE_SET_PROTOTYPE_METHOD(constructor, "equalizeHist", EqualizeHist);
 
+  NODE_SET_PROTOTYPE_METHOD(constructor, "autoCrop", AutoCrop);
+  
 	NODE_SET_PROTOTYPE_METHOD(constructor, "floodFill", FloodFill);
 
 	NODE_SET_METHOD(constructor, "Eye", Eye);
@@ -1527,6 +1529,127 @@ Matrix::FloodFill(const Arguments& args){
 
 
 	return scope.Close(Number::New( ret ));
+}
+/**
+ * Function to check if the color of the given image
+ * is the same as the given color
+ *
+ * Parameters:
+ *   edge        The source image
+ *   color   The color to check
+ */
+bool is_border(cv::Mat& edge, cv::Vec3b color)
+{
+    cv::Mat im = edge.clone().reshape(0,1);
+
+    bool res = true;
+    for (int i = 0; i < im.cols; ++i)
+        res &= (color == im.at<cv::Vec3b>(0,i));
+
+    return res;
+}
+void autocrop(cv::Mat& src, cv::Mat& dst)
+{
+    cv::Rect win(0, 0, src.cols, src.rows);
+
+    std::vector<cv::Rect> edges;
+    edges.push_back(cv::Rect(0, 0, src.cols, 1));
+    edges.push_back(cv::Rect(src.cols-2, 0, 1, src.rows));
+    edges.push_back(cv::Rect(0, src.rows-2, src.cols, 1));
+    edges.push_back(cv::Rect(0, 0, 1, src.rows));
+
+    cv::Mat edge;
+    int nborder = 0;
+    cv::Vec3b color = src.at<cv::Vec3b>(0,0);
+
+    for (int i = 0; i < edges.size(); ++i)
+    {
+        edge = src(edges[i]);
+        nborder += is_border(edge, color);
+    }
+
+    if (nborder < 4)
+    {
+        src.copyTo(dst);
+        return;
+    }
+
+    bool next;
+
+    do {
+        edge = src(cv::Rect(win.x, win.height-2, win.width, 1));
+        if (next = is_border(edge, color))
+            win.height--;
+    }
+    while (next && win.height > 0);
+
+    do {
+        edge = src(cv::Rect(win.width-2, win.y, 1, win.height));
+        if (next = is_border(edge, color))
+            win.width--;
+    }
+    while (next && win.width > 0);
+
+    do {
+        edge = src(cv::Rect(win.x, win.y, win.width, 1));
+        if (next = is_border(edge, color))
+            win.y++, win.height--;
+    }
+    while (next && win.y <= src.rows);
+
+    do {
+        edge = src(cv::Rect(win.x, win.y, 1, win.height));
+        if (next = is_border(edge, color))
+            win.x++, win.width--;
+    }
+    while (next && win.x <= src.cols);
+
+    dst = src(win);
+}
+Handle<Value>
+Matrix::AutoCrop(const Arguments& args){
+  SETUP_FUNCTION(Matrix)
+  
+  
+  
+  Local<Object> img_to_return = Matrix::constructor->GetFunction()->NewInstance();
+	Matrix *img = ObjectWrap::Unwrap<Matrix>(img_to_return);
+	self->mat.copyTo(img->mat);
+
+  autocrop(self->mat, img->mat);
+  // cv::threshold(self->mat, img->mat, threshold, maxVal, typ);
+
+	return scope.Close(img_to_return);
+  
+  // SETUP_FUNCTION(Matrix)
+  // //obj->Get(v8::String::NewSymbol("x"))
+  // //int cv::floodFill(cv::InputOutputArray, cv::Point, cv::Scalar, cv::Rect*, cv::Scalar, cv::Scalar, int)
+  // 
+  // 
+  // /* mat.floodFill( { seedPoint: [1,1]   ,
+  //        newColor: [255,0,0] ,
+  //        rect:[[0,2],[30,40]] ,
+  //        loDiff : [8,90,60],
+  //        upDiff:[10,100,70]
+  // } );*/
+  // 
+  // 
+  // if(args.Length() < 1 || !args[0]->IsObject()) {
+  //  //error
+  // }
+  // 
+  // 
+  // Local<Object> obj = args[0]->ToObject();
+  // 
+  // int  ret = cv::floodFill(self->mat, setPoint(obj->Get(v8::String::NewSymbol("seedPoint"))->ToObject())
+  //    , setColor(obj->Get(v8::String::NewSymbol("newColor"))->ToObject())
+  //    , obj->Get(v8::String::NewSymbol("rect"))->IsUndefined() ? 0 : setRect(obj->Get(v8::String::NewSymbol("rect"))->ToObject())
+  //    , setColor(obj->Get(v8::String::NewSymbol("loDiff"))->ToObject())
+  //    , setColor(obj->Get(v8::String::NewSymbol("upDiff"))->ToObject())
+  //    , 4 );
+  // 
+  // 
+  // return scope.Close(Number::New( ret ));
 }
 
 

@@ -49,6 +49,7 @@ class OpenCV: public node::ObjectWrap{
     static void Init(Handle<Object> target);
 
     static Handle<Value> ReadImage(const v8::Arguments&);
+    
 
 };
 
